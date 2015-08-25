@@ -79,6 +79,9 @@
 
 */
 
+#include <malloc.h>
+#include <algorithm>
+
 #include "utils.h"
 
 void your_histogram_and_prefixsum(const float* const d_logLuminance,
@@ -91,22 +94,51 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
 {
   //TODO
   /*Here are the steps you need to implement
-    1) find the minimum and maximum value in the input logLuminance channel
-       store in min_logLum and max_logLum
+	 1) find the minimum and maximum value in the input logLuminance channel
+	 store in min_logLum and max_logLum
 	 * -> parallel reduce
 	 */
-	  
 	// iterate over block_sizes
 	// parallel min, cuda_calls
 
+	// serial implementation
+	for (size_t i = 0; i < numRows * numCols; i++) {
+		min_logLum = min(min_logLum, d_logLuminance[i]);
+		max_logLum = max(max_logLum, d_logLuminance[i]);
+	}
+
   /*
-	  2) subtract them to find the range
-    3) generate a histogram of all the values in the logLuminance channel using
-       the formula: bin = (lum[i] - lumMin) / lumRange * numBins
+	 2) subtract them to find the range
+	 */
+	float lumRange = max_logLum - min_logLum;
+
+	/*
+  //TODO
+	 3) generate a histogram of all the values in the logLuminance channel using
+	 the formula: bin = (lum[i] - lumMin) / lumRange * numBins
 	 * -> atomic add / alternatives
+	 */
+
+	unsigned int *histogram = (unsigned int*) calloc(numBins, sizeof(unsigned int));
+	// serial implementation
+	for (size_t j = 0; j < numBins; j++) {
+		histogram[j] = 0;
+	}
+
+	size_t bin;
+	for (size_t i = 0; i < numCols * numRows; i++) {
+		bin = (d_logLuminance[i] - min_logLum) / lumRange * numBins;
+		histogram[bin]++;
+	}
+
+	/*
     4) Perform an exclusive scan (prefix sum) on the histogram to get
        the cumulative distribution of luminance values (this should go in the
        incoming d_cdf pointer which already has been allocated for you)       */
 
-
+	// serial implementation
+	d_cdf[0] = 0;
+	for (size_t i = 1; i < numCols * numRows; i++) {
+		d_cdf[i] = d_cdf[i-1] + histogram[i-1];
+	}
 }
