@@ -84,6 +84,12 @@
 
 #include "utils.h"
 
+__global__
+void init_histogram(unsigned int *histogram) {
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	histogram[tid] = 0;
+}
+
 void your_histogram_and_prefixsum(const float* const d_logLuminance,
                                   unsigned int* const d_cdf,
                                   float &min_logLum,
@@ -101,8 +107,10 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
 	// iterate over block_sizes
 	// parallel min, cuda_calls
 
+	min_logLum = max_logLum = d_logLuminance[0];
+
 	// serial implementation
-	for (size_t i = 0; i < numRows * numCols; i++) {
+	for (size_t i = 1; i < numRows * numCols; i++) {
 		min_logLum = min(min_logLum, d_logLuminance[i]);
 		max_logLum = max(max_logLum, d_logLuminance[i]);
 	}
@@ -121,13 +129,12 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
 
 	unsigned int *histogram = (unsigned int*) calloc(numBins, sizeof(unsigned int));
 	// serial implementation
-	for (size_t j = 0; j < numBins; j++) {
-		histogram[j] = 0;
-	}
+	size_t blockSize = 512;
+	init_histogram<<<(numBins + blockSize - 1)/blockSize, blockSize>>>(histogram);
 
 	size_t bin;
 	for (size_t i = 0; i < numCols * numRows; i++) {
-		bin = (d_logLuminance[i] - min_logLum) / lumRange * numBins;
+		bin = min(numBins-1, (d_logLuminance[i] - min_logLum) / lumRange * numBins);
 		histogram[bin]++;
 	}
 
